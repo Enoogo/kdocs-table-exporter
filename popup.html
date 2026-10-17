@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>KDocs 表格导出器</title>
+<style>
+  body {
+    width: 320px;
+    margin: 0;
+    padding: 12px 14px 14px;
+    font: 13px/1.6 -apple-system, "Microsoft YaHei", sans-serif;
+    color: #222;
+    background: #fff;
+  }
+  h1 { font-size: 14px; margin: 0 0 8px; }
+  .muted { color: #888; font-size: 12px; }
+  .box {
+    border: 1px solid #e2e2e2;
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin: 8px 0;
+  }
+  #sheetList { max-height: 140px; overflow: auto; }
+  .sheet-item { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
+  .sheet-item label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
+  select, input[type=number] {
+    border: 1px solid #ccc; border-radius: 5px; padding: 3px 6px; font-size: 12px;
+  }
+  input[type=number] { width: 62px; }
+  button {
+    border: 0; border-radius: 6px; padding: 7px 10px; font-size: 13px; cursor: pointer;
+    background: #1a7f37; color: #fff; width: 100%; margin-top: 6px;
+  }
+  button.secondary { background: #f0f0f0; color: #222; }
+  button:disabled { opacity: .5; cursor: default; }
+  #log { margin-top: 8px; font-size: 12px; color: #555; white-space: pre-wrap; word-break: break-all; max-height: 120px; overflow: auto; }
+  #log.err { color: #c0392b; }
+</style>
+</head>
+<body>
+  <h1>📊 KDocs 表格导出器</h1>
+  <div class="muted" id="docInfo">正在连接页面…</div>
+
+  <div class="box">
+    <div class="row"><strong>选择工作表</strong>
+      <span style="flex:1"></span>
+      <a href="#" id="selAll" class="muted">全选</a>
+      <a href="#" id="selNone" class="muted">清空</a>
+    </div>
+    <div id="sheetList"><span class="muted">加载中…</span></div>
+  </div>
+
+  <div class="box">
+    <div class="row">
+      <span>格式</span>
+      <select id="format">
+        <option value="tsv" selected>TSV（Excel 直接粘贴）</option>
+        <option value="csv">CSV</option>
+        <option value="json">JSON</option>
+      </select>
+    </div>
+    <div class="row">
+      <span>最大行</span><input type="number" id="maxRows" value="20000" min="1">
+      <span>最大列</span><input type="number" id="maxCols" value="256" min="1">
+    </div>
+  </div>
+
+  <button id="btnDownload">⬇️ 导出并下载所选工作表</button>
+  <button id="btnCopy" class="secondary">📋 复制第一个所选表（TSV）到剪贴板</button>
+  <button id="btnRefresh" class="secondary">🔄 重新扫描工作表</button>
+
+  <div class="box">
+    <div class="row"><strong>🕵️ 脱敏探针诊断</strong>
+      <span style="flex:1"></span>
+      <span class="muted">判断打码发生在服务端还是客户端</span>
+    </div>
+    <div class="row">
+      <button class="secondary" id="btnProbeStatus" style="width:auto">📥 读取探针统计</button>
+      <button class="secondary" id="btnProbeTrigger" style="width:auto">🔄 触发数据加载</button>
+      <button class="secondary" id="btnProbeReset" style="width:auto">🧹 清零</button>
+    </div>
+    <div id="probeOut" class="muted" style="white-space:pre-wrap;max-height:160px;overflow:auto"></div>
+  </div>
+
+  <div id="log"></div>
+  <script src="popup.js"></script>
+</body>
+</html>
