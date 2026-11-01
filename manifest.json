@@ -1,22 +1,39 @@
 {
   "manifest_version": 3,
   "name": "KDocs 表格导出器 (KDocs Table Exporter)",
-  "version": "1.2.0",
-  "description": "强制导出金山文档 / WPS 365 在线表格（canvas 渲染、禁止复制也能导出）为 TSV / CSV / JSON，或复制到剪贴板。附带脱敏层级诊断探针。",
+  "version": "1.3.0",
+  "description": "强制导出金山文档 / WPS 365 / 腾讯文档在线表格（canvas 渲染、禁止复制也能导出）为 TSV / CSV / JSON，或复制到剪贴板。附带脱敏层级诊断探针。",
   "permissions": ["clipboardWrite", "activeTab"],
-  "host_permissions": ["*://*.kdocs.cn/*", "*://*.wps.cn/*"],
+  "host_permissions": [
+    "*://*.kdocs.cn/*",
+    "*://*.wps.cn/*",
+    "*://*.docs.qq.com/*"
+  ],
   "content_scripts": [
     {
       "matches": ["*://*.kdocs.cn/*", "*://*.wps.cn/*"],
       "js": ["content.js"],
       "run_at": "document_start",
       "all_frames": true
+    },
+    {
+      "matches": ["*://*.docs.qq.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    },
+    {
+      "matches": ["*://*.docs.qq.com/*"],
+      "js": ["inject.js"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "world": "MAIN"
     }
   ],
   "web_accessible_resources": [
     {
       "resources": ["inject.js", "probe.js"],
-      "matches": ["*://*.kdocs.cn/*", "*://*.wps.cn/*"]
+      "matches": ["*://*.kdocs.cn/*", "*://*.wps.cn/*", "*://*.docs.qq.com/*"]
     }
   ],
   "action": {

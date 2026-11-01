@@ -2,6 +2,7 @@
 var tabId = null;
 var sheets = [];
 var docTitle = 'kdocs';
+var platform = 'kdocs';
 
 function log(msg, isErr) {
   var el = document.getElementById('log');
@@ -13,7 +14,7 @@ function send(msg) {
   return new Promise(function (resolve) {
     chrome.tabs.sendMessage(tabId, msg, function (res) {
       if (chrome.runtime.lastError) {
-        resolve({ ok: false, error: '无法连接页面：' + chrome.runtime.lastError.message + '。请刷新该 kdocs 页面后重试。' });
+        resolve({ ok: false, error: '无法连接页面：' + chrome.runtime.lastError.message + '。请刷新该在线表格页面后重试。' });
         return;
       }
       resolve(res || { ok: false, error: '页面无响应' });
@@ -22,7 +23,13 @@ function send(msg) {
 }
 
 function sanitize(name) {
-  return String(name || 'kdocs').replace(/[\\/:*?"<>|\r\n\t]+/g, '_').slice(0, 80) || 'kdocs';
+  return String(name || 'sheet').replace(/[\\/:*?"<>|\r\n\t]+/g, '_').slice(0, 80) || 'sheet';
+}
+
+function escHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
 }
 
 function selectedIndexes() {
@@ -42,12 +49,16 @@ function renderSheets() {
       return (
         '<div class="sheet-item">' +
         '<input type="checkbox" id="s' + s.index + '" value="' + s.index + '" checked>' +
-        '<label for="s' + s.index + '" title="' + s.name + '">' + s.name + '</label>' +
+        '<label for="s' + s.index + '" title="' + escHtml(s.name) + '">' + escHtml(s.name) + '</label>' +
         '<span class="muted">≈' + s.approxRows + '×' + s.approxCols + '</span>' +
         '</div>'
       );
     })
     .join('');
+}
+
+function platformLabel() {
+  return platform === 'tencent' ? '腾讯文档' : '金山文档/WPS 365';
 }
 
 async function loadSheets() {
@@ -58,10 +69,11 @@ async function loadSheets() {
     return;
   }
   sheets = res.sheets || [];
+  platform = res.platform || 'kdocs';
   docTitle = sanitize(res.title);
-  document.getElementById('docInfo').textContent = docTitle + ' · 共 ' + sheets.length + ' 个工作表';
+  document.getElementById('docInfo').textContent = docTitle + ' · ' + platformLabel() + ' · 共 ' + sheets.length + ' 个工作表';
   renderSheets();
-  log('扫描完成，请选择工作表后导出。');
+  log(sheets.length ? '扫描完成，请选择工作表后导出。' : '未发现可导出的工作表。', !sheets.length);
 }
 
 function buildFileName(sheetName, format) {
@@ -73,19 +85,16 @@ async function doDownload() {
   var idxs = selectedIndexes();
   var format = document.getElementById('format').value;
   if (!idxs.length) { log('请先勾选至少一个工作表', true); return; }
-  if (format === 'json' && idxs.length > 1) {
-    // JSON 合并为单文件
-  }
+
   var maxRows = document.getElementById('maxRows').value;
   var maxCols = document.getElementById('maxCols').value;
 
-  var targetIndexes = idxs;
   var names = idxs.map(function (i) {
     var s = sheets.filter(function (x) { return x.index === i; })[0] || { name: 'Sheet' + i };
-    return format === 'json' && idxs.length > 1
-      ? sanitize(docTitle) + '.json'
-      : buildFileName(s.name, format);
+    return buildFileName(s.name, format);
   });
+  // 多表 JSON 会合并成一个文件
+  var fileNames = (format === 'json' && idxs.length > 1) ? [sanitize(docTitle) + '.json'] : names;
 
   log('正在提取数据…（大表格可能需要几秒）');
   document.getElementById('btnDownload').disabled = true;
@@ -93,17 +102,18 @@ async function doDownload() {
     source: 'kdte-ext',
     cmd: 'export-download',
     format: format,
-    sheetIndexes: targetIndexes,
-    fileNames: format === 'json' && idxs.length > 1 ? [names[0]] : names,
+    sheetIndexes: idxs,
+    fileNames: fileNames,
     maxRows: maxRows,
     maxCols: maxCols
   });
   document.getElementById('btnDownload').disabled = false;
 
   if (!res.ok) { log(res.error, true); return; }
+  var files = res.files || [];
   log(
-    '✅ 已下载 ' + res.files.length + ' 个文件：\n' +
-    res.files.map(function (f) {
+    '✅ 已下载 ' + files.length + ' 个文件：\n' +
+    files.map(function (f) {
       return '· ' + f.name + '（' + f.rowCount + ' 行 × ' + f.colCount + ' 列，' + Math.round(f.bytes / 1024) + ' KB）';
     }).join('\n')
   );
@@ -130,8 +140,9 @@ async function doCopy() {
   }
 }
 
-/* ---------- 脱敏探针诊断 ---------- */
+/* ---------- 金山/WPS：网络探针诊断 ---------- */
 function probeConcl(st) {
+  if (!st) return '探针未安装。请确认插件已更新、在 chrome://extensions 点过「重新加载」、页面已硬刷新（Ctrl+Shift+R）。';
   if (st.markerPayloads === 0) {
     return '⚠️ 还没抓到表格数据载荷（可能是离线缓存恢复的数据）。\n请点「触发数据加载」，或在表格里滚动到底部、切换一次工作表，再点「读取探针统计」。';
   }
@@ -148,9 +159,9 @@ function probeConcl(st) {
   return '⚠️ 载荷里既没圆点也没号码形态，数据可能以编码/二进制格式下发，需要进一步抓包分析。';
 }
 
-function renderProbe(st) {
+function renderNetworkProbe(st) {
   if (!st) {
-    return '探针未安装。请确认：插件已更新到 v1.2.0、在 chrome://extensions 点过「重新加载」、页面已硬刷新（Ctrl+Shift+R）。';
+    return '探针未安装。请确认插件已更新、在 chrome://extensions 点过「重新加载」、页面已硬刷新（Ctrl+Shift+R）。';
   }
   return [
     '运行时长：' + Math.round((Date.now() - st.startedAt) / 1000) + ' 秒',
@@ -166,25 +177,73 @@ function renderProbe(st) {
   ].join('\n');
 }
 
+/* ---------- 腾讯文档：表格模型诊断 ---------- */
+function modelConcl(st) {
+  if (!st) return '未读取到模型统计。';
+  if (st.maskedWithRawValue > 0) {
+    return '🔎 结论：显示值被打码，但模型 value 里能读到非打码原值 → 属于显示层/客户端打码，真值到过浏览器。';
+  }
+  if (st.maskedCells > 0) {
+    return '🔎 结论：模型里的 value 本身就是打码的 → 打码发生在数据下发/建模阶段，客户端模型里没有读到非打码原值。';
+  }
+  return '✅ 未发现打码单元格。';
+}
+
+function renderModelProbe(st) {
+  if (!st) return '未读取到模型统计。';
+  var lines = [
+    '诊断模式：表格模型（腾讯文档）',
+    '工作表：' + st.sheets + ' 个',
+    '扫描单元格：' + st.cellsScanned + '，非空：' + st.nonEmptyCells,
+    '显示值含打码（****/●●●）：' + st.maskedCells + ' 个',
+    '底层 value 与显示值不同：' + st.valueDiffersFromDisplay + ' 个',
+    '打码但底层有非打码原值：' + st.maskedWithRawValue + ' 个'
+  ];
+  if (st.truncated) {
+    lines.push('⚠️ 表格较大，诊断只扫描了前 5000 行 × 64 列。');
+  }
+  if (st.samples && st.samples.length) {
+    lines.push('', '示例（仅打码预览）：');
+    st.samples.forEach(function (s) {
+      lines.push('· ' + s.sheet + ' R' + s.row + 'C' + s.col + '：' + s.display + ' / ' + s.rawPreview);
+    });
+  }
+  lines.push('', modelConcl(st));
+  return lines.join('\n');
+}
+
+function renderProbe(res) {
+  if (res.mode === 'model') return renderModelProbe(res.stats);
+  if (!res.installed) {
+    return '探针未安装。请确认插件已更新、在 chrome://extensions 点过「重新加载」、页面已硬刷新（Ctrl+Shift+R）。';
+  }
+  return renderNetworkProbe(res.stats);
+}
+
 async function probeStatus() {
   var out = document.getElementById('probeOut');
   out.textContent = '读取中…';
   var res = await send({ source: 'kdte-ext', cmd: 'probe-status' });
   if (!res.ok) { out.textContent = res.error; return; }
-  out.textContent = renderProbe(res.stats);
+  out.textContent = renderProbe(res);
 }
 
 async function probeTrigger() {
   var out = document.getElementById('probeOut');
   var res = await send({ source: 'kdte-ext', cmd: 'probe-trigger' });
   if (!res.ok) { out.textContent = res.error; return; }
+  if (res.skipped) {
+    out.textContent = '✅ 当前平台的数据已在内存模型中，无需触发加载。请直接点「读取探针统计」。';
+    return;
+  }
   out.textContent = '✅ 已触发 ' + res.results.length + ' 个工作表重新加载数据。\n等 2~3 秒后点「读取探针统计」。';
 }
 
 async function probeReset() {
   var out = document.getElementById('probeOut');
   var res = await send({ source: 'kdte-ext', cmd: 'probe-reset' });
-  out.textContent = res.ok ? '✅ 已清零统计。' : res.error;
+  if (!res.ok) { out.textContent = res.error; return; }
+  out.textContent = res.note === 'model' ? '✅ 模型诊断无需清零。' : '✅ 已清零统计。';
 }
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -200,13 +259,6 @@ document.addEventListener('DOMContentLoaded', async function () {
   var tabs = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tabs.length) { log('未找到活动标签页', true); return; }
   tabId = tabs[0].id;
-  var url = tabs[0].url || '';
-  if (!/kdocs\.cn|wps\.cn/.test(url)) {
-    document.getElementById('docInfo').textContent = '当前页面不是 kdocs/WPS 365 文档';
-    log('请先打开一个金山文档/WPS 365 的「表格」文档。', true);
-    return;
-  }
-  await loadSheets();
 
   document.getElementById('btnDownload').addEventListener('click', doDownload);
   document.getElementById('btnCopy').addEventListener('click', doCopy);
@@ -219,4 +271,12 @@ document.addEventListener('DOMContentLoaded', async function () {
     e.preventDefault();
     document.querySelectorAll('#sheetList input').forEach(function (i) { i.checked = false; });
   });
+
+  var url = tabs[0].url || '';
+  if (!/kdocs\.cn|wps\.cn|docs\.qq\.com/.test(url)) {
+    document.getElementById('docInfo').textContent = '当前页面不是金山文档/WPS 365/腾讯文档';
+    log('请先打开一个金山文档/WPS 365 或 腾讯文档的「表格」文档。', true);
+    return;
+  }
+  await loadSheets();
 });

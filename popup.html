@@ -12,7 +12,7 @@
     color: #222;
     background: #fff;
   }
-  h1 { font-size: 14px; margin: 0 0 8px; }
+  h1 { font-size: 14px; margin: 0 0 2px; }
   .muted { color: #888; font-size: 12px; }
   .box {
     border: 1px solid #e2e2e2;
@@ -41,6 +41,7 @@
 <body>
   <h1>📊 KDocs 表格导出器</h1>
   <div class="muted" id="docInfo">正在连接页面…</div>
+  <div class="muted">支持金山文档 / WPS 365 / 腾讯文档在线表格</div>
 
   <div class="box">
     <div class="row"><strong>选择工作表</strong>
@@ -73,7 +74,7 @@
   <div class="box">
     <div class="row"><strong>🕵️ 脱敏探针诊断</strong>
       <span style="flex:1"></span>
-      <span class="muted">判断打码发生在服务端还是客户端</span>
+      <span class="muted">金山/WPS：网络探针；腾讯文档：表格模型</span>
     </div>
     <div class="row">
       <button class="secondary" id="btnProbeStatus" style="width:auto">📥 读取探针统计</button>
